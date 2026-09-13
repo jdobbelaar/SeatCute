@@ -76,6 +76,8 @@
       }
       pendingPartySize = partySize;
       showWaitPreview(estimate);
+    } catch (err) {
+      showMessage('Something went wrong. Please see the host for help.', CFG.MESSAGE_DEFAULT_MS);
     } finally {
       btnGetInLine.disabled = false;
     }
@@ -196,6 +198,8 @@
       const queue = await API.listQueue(entry.queueSize);
       const withWait = queue.find((q) => q.id === entry.id);
       showStatusResult(withWait || entry);
+    } catch (err) {
+      showMessage('Something went wrong. Please see the host for help.', CFG.MESSAGE_DEFAULT_MS);
     } finally {
       btnCheckStatus.disabled = false;
     }

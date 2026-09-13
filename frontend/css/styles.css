@@ -325,6 +325,16 @@ section.panel {
   min-height: 1.2em;
 }
 
+.banner-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid #f3c2c2;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
 /* ---------- Kiosk ---------- */
 
 .kiosk-body {

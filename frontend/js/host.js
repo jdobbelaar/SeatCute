@@ -12,6 +12,17 @@
   const tabAdmin = document.getElementById('tab-admin');
   const viewHost = document.getElementById('view-host');
   const viewAdmin = document.getElementById('view-admin');
+  const connectionError = document.getElementById('connection-error');
+
+  function showConnectionError(err) {
+    const detail = err && err.message ? err.message : 'connection failed';
+    connectionError.textContent = `Could not reach the backend at ${window.SeatCuteConfig.API_BASE_URL} — make sure it's running, then try again. (${detail})`;
+    connectionError.hidden = false;
+  }
+
+  function hideConnectionError() {
+    connectionError.hidden = true;
+  }
 
   tabHost.addEventListener('click', () => switchView('host'));
   tabAdmin.addEventListener('click', () => switchView('admin'));
@@ -50,7 +61,14 @@
   });
 
   async function renderHost() {
-    const [tables, queueEntries] = await Promise.all([API.listTables(), API.listQueue()]);
+    let tables, queueEntries;
+    try {
+      [tables, queueEntries] = await Promise.all([API.listTables(), API.listQueue()]);
+    } catch (err) {
+      showConnectionError(err);
+      return;
+    }
+    hideConnectionError();
 
     // Selection may have gone stale (e.g. the table was seated elsewhere).
     if (selectedTableId && !tables.some((t) => t.id === selectedTableId && t.status === 'available')) {
@@ -153,8 +171,13 @@
       releaseBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         releaseBtn.disabled = true;
-        await API.releaseTable(table.id);
-        await renderHost();
+        try {
+          await API.releaseTable(table.id);
+          await renderHost();
+        } catch (err) {
+          alert(err.message || 'Could not release that table.');
+          releaseBtn.disabled = false;
+        }
       });
       releaseRow.appendChild(releaseBtn);
       card.appendChild(releaseRow);
@@ -237,8 +260,13 @@
     dismissBtn.textContent = 'Dismiss';
     dismissBtn.addEventListener('click', async () => {
       dismissBtn.disabled = true;
-      await API.dismissQueueEntry(entry.id);
-      await renderHost();
+      try {
+        await API.dismissQueueEntry(entry.id);
+        await renderHost();
+      } catch (err) {
+        alert(err.message || 'Could not dismiss this entry.');
+        dismissBtn.disabled = false;
+      }
     });
     actions.appendChild(dismissBtn);
 
@@ -270,7 +298,13 @@
   }
 
   async function renderAdmin() {
-    await renderAdminForm();
+    try {
+      await renderAdminForm();
+    } catch (err) {
+      showConnectionError(err);
+      return;
+    }
+    hideConnectionError();
     saveStatus.textContent = '';
   }
 
@@ -286,7 +320,10 @@
     try {
       await API.saveConfig(newConfig);
       await renderAdminForm();
+      hideConnectionError();
       saveStatus.textContent = 'Saved.';
+    } catch (err) {
+      alert(err.message || 'Could not save changes.');
     } finally {
       btnSaveConfig.disabled = false;
     }
