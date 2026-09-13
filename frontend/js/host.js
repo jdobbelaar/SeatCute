@@ -252,7 +252,10 @@
   const btnSaveConfig = document.getElementById('btn-save-config');
   const saveStatus = document.getElementById('save-status');
 
-  async function renderAdmin() {
+  // Renders the form rows from a config, without touching the save-status
+  // message -- callers decide whether this is a fresh view (clear it) or a
+  // post-save refresh (leave the "Saved." message in place).
+  async function renderAdminForm() {
     const config = await API.getConfig();
     adminConfigBody.innerHTML = '';
     for (const size of SIZES) {
@@ -264,6 +267,10 @@
       `;
       adminConfigBody.appendChild(row);
     }
+  }
+
+  async function renderAdmin() {
+    await renderAdminForm();
     saveStatus.textContent = '';
   }
 
@@ -278,8 +285,8 @@
     btnSaveConfig.disabled = true;
     try {
       await API.saveConfig(newConfig);
+      await renderAdminForm();
       saveStatus.textContent = 'Saved.';
-      await renderAdmin();
     } finally {
       btnSaveConfig.disabled = false;
     }

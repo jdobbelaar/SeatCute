@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from .errors import ApiError
@@ -9,6 +10,18 @@ app = FastAPI(
     title="SeatCute API",
     version="0.1.0",
     description="See openapi.yaml at the repository root for the hand-authored contract this implements.",
+)
+
+# Dev-only, permissive CORS: the frontend (frontend/index.html, kiosk.html)
+# is served from a different origin (a plain static file server) than this
+# API, and browsers enforce CORS for fetch() even though tools like curl
+# don't. Tighten allow_origins to the real frontend origin(s) once this
+# stops being a local mock backend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(config.router)
