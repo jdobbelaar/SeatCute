@@ -1,0 +1,25 @@
+[project]
+name = "seatcute-backend"
+version = "0.1.0"
+description = "SeatCute FastAPI backend (mock in-memory store; see openapi.yaml)"
+authors = [
+    { name = "Joshua Dobbelaar", email = "jdobbelaar@blueport.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.12.0",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

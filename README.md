@@ -29,3 +29,22 @@ uv run python -m http.server 8000 --directory frontend
 Then open `http://localhost:8000/index.html` (Host/Admin) and
 `http://localhost:8000/kiosk.html` (Kiosk) — both read/write the same
 `localStorage`, so open them in the same browser to see shared state.
+
+## Backend
+
+`backend/` is a FastAPI implementation of `openapi.yaml`, managed with
+[uv](https://docs.astral.sh/uv/). It currently uses an in-memory mock store
+(`seatcute_backend/store.py`) instead of a real database — same business
+rules as `frontend/js/mockApi.js`, just re-implemented in Python — injected
+via a FastAPI dependency (`seatcute_backend/deps.py`) so it can be swapped
+for a real database later without touching the routers. The frontend does
+not talk to this backend yet; it still uses its own mock API layer.
+
+```
+cd backend
+uv sync                 # install dependencies into backend/.venv
+uv run pytest           # run the test suite
+uv run uvicorn seatcute_backend.main:app --reload --app-dir src
+```
+
+Then open `http://localhost:8000/docs` for interactive API docs.
