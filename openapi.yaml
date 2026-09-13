@@ -1,0 +1,578 @@
+openapi: 3.0.3
+info:
+  title: SeatCute API
+  description: |
+    REST contract for SeatCute's future FastAPI backend (see `_docs/specs.md`
+    §6 and §8). The current frontend (`frontend/js/mockApi.js`) implements
+    this exact same behavior against `localStorage` in the browser; this
+    document describes the HTTP surface that will eventually replace it
+    without requiring any change to the frontend's call sites.
+
+    Restaurants using SeatCute have four fixed table sizes (1, 2, 4, 6
+    seats). Business rules such as wait-time projection, the two-click
+    seating transaction, and pending-removal handling are described in
+    `_docs/specs.md` §4 and are enforced server-side; this document only
+    describes the request/response shapes.
+  version: "0.1.0"
+servers:
+  - url: http://localhost:8000
+    description: Local development (backend not yet implemented)
+
+security: []
+# No authentication/login for Admin, Host, or Kiosk (see _docs/specs.md §7,
+# non-goals). Declared explicitly (rather than left unset) for linters that
+# otherwise flag every operation as missing a security requirement.
+
+tags:
+  - name: Config
+    description: Admin configuration for table counts and turnover times (US-A1).
+  - name: Tables
+    description: Table occupancy and seating transactions (US-H1, US-H2, US-H3).
+  - name: Queue
+    description: Waitlist entries and wait-time projections (US-H4, US-H5, US-K1, US-K2, US-K3).
+
+paths:
+  /config:
+    get:
+      operationId: getConfig
+      tags: [Config]
+      summary: Get the current admin configuration
+      description: Table counts and turnover minutes per size, pre-filled with defaults if none has been saved yet.
+      responses:
+        "200":
+          description: Current configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminConfig"
+
+    put:
+      operationId: saveConfig
+      tags: [Config]
+      summary: Save admin configuration (US-A1)
+      description: |
+        Updates table counts and turnover minutes per size and takes effect
+        immediately. Saving is never blocked by current occupancy:
+
+        - Increasing a size's count first un-flags existing pending-removal
+          tables of that size (lowest-numbered first), then appends new
+          `available` tables with the next sequential labels for any
+          remaining increase.
+        - Decreasing a size's count removes `available` tables first
+          (highest-numbered first); if that isn't enough, the remaining
+          excess flags currently-`occupied` tables (highest-numbered first)
+          as `pendingRemoval` — they keep operating normally until the Host
+          releases them, at which point they're deleted instead of freed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminConfigInput"
+      responses:
+        "200":
+          description: The saved configuration, as persisted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminConfig"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /tables:
+    get:
+      operationId: listTables
+      tags: [Tables]
+      summary: List all tables (US-H1)
+      description: |
+        Returns every table, sorted by size then label index, each annotated
+        with computed occupancy fields (elapsed time, projected free time).
+      responses:
+        "200":
+          description: All tables, grouped implicitly by ascending size then label.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TableView"
+
+  /tables/{tableId}/seat-from-queue:
+    post:
+      operationId: seatFromQueue
+      tags: [Tables]
+      summary: Seat a queue entry at a selected table (US-H2, step 2a)
+      description: |
+        Second half of the Host's two-click seating transaction: with an
+        `available` table selected, seats a party pulled from any size's
+        queue (a small party may be seated at a larger table). The entry is
+        removed from its queue and its name/phone attached to the table,
+        which becomes `occupied` with `occupiedAt = now`.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [queueEntryId]
+              properties:
+                queueEntryId:
+                  type: string
+                  description: id of the QueueEntry to seat (from any size's queue).
+      responses:
+        "200":
+          description: The now-occupied table.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Table"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/TableUnavailable"
+
+  /tables/{tableId}/seat-bypass:
+    post:
+      operationId: seatBypass
+      tags: [Tables]
+      summary: Seat a walk-in without a queue entry (US-H2, step 2b)
+      description: |
+        Second half of the Host's two-click seating transaction for a
+        walk-in not in the queue. The selected table becomes `occupied`
+        with `occupiedAt = now` and no attached party.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      responses:
+        "200":
+          description: The now-occupied table.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Table"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/TableUnavailable"
+
+  /tables/{tableId}/release:
+    post:
+      operationId: releaseTable
+      tags: [Tables]
+      summary: Release an occupied table (US-H3)
+      description: |
+        If the table is not flagged `pendingRemoval`, it becomes `available`
+        again (`occupiedAt` and `party` cleared). If it *is* flagged
+        `pendingRemoval`, it is deleted entirely instead of becoming
+        available. Either way, this never auto-assigns the next queue
+        entry — that requires a separate seating transaction.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      responses:
+        "204":
+          description: Table released (or deleted, if it was pending removal).
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /queue:
+    get:
+      operationId: listQueue
+      tags: [Queue]
+      summary: List queue entries with projected wait (US-H4)
+      description: |
+        Lists queue entries in join order, each annotated with its position
+        and projected wait, computed per `_docs/specs.md` §4 (the k-th
+        entry of a size projects onto the k-th soonest-freeing table of
+        that size). Omit `size` to list every size's queue at once.
+      parameters:
+        - name: size
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/TableSize"
+          description: Restrict to one size's queue; omit for all sizes.
+      responses:
+        "200":
+          description: Queue entries in join order, with computed wait fields.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QueueEntryView"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+    post:
+      operationId: joinQueue
+      tags: [Queue]
+      summary: Join the waitlist (US-K2)
+      description: |
+        Maps `partySize` to the smallest sufficient table size and creates a
+        queue entry. Rejected if `partySize` exceeds the largest table size
+        (no valid mapping), or if the phone number already has an active
+        entry in *any* size's queue (duplicate check is global, not
+        per-size).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinQueueRequest"
+      responses:
+        "201":
+          description: The created queue entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueEntry"
+        "409":
+          description: This phone number already has an active reservation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: DUPLICATE_PHONE
+                message: This phone number already has an active reservation.
+        "422":
+          description: Party size exceeds the largest table (no valid mapping).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: PARTY_TOO_LARGE
+                message: Party size exceeds the largest table.
+
+  /queue/wait-estimate:
+    get:
+      operationId: getWaitEstimate
+      tags: [Queue]
+      summary: Preview the wait for joining now, without creating an entry (US-K1)
+      description: |
+        Used by the kiosk to decide the Welcome-screen outcome and, when not
+        immediately seatable, to show a wait estimate *before* asking for
+        name/phone. Maps `partySize` to a queue size and reports whether a
+        table is available with that size's queue currently empty (in which
+        case the party should be sent straight to the Host with no queue
+        entry); otherwise previews the projected wait for the queue
+        position this party would take if they joined right now.
+      parameters:
+        - name: partySize
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Exact party size entered by the customer.
+      responses:
+        "200":
+          description: Wait estimate (or immediate-seat signal).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitEstimate"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /reservation-status:
+    get:
+      operationId: findActiveQueueEntryByPhone
+      tags: [Queue]
+      summary: Find the active queue entry for a phone number (US-K3)
+      description: |
+        Used both for the kiosk's Reservation Status lookup and internally
+        for the duplicate-phone check on join. The check is global across
+        all sizes' queues, not per-size. A separate top-level path (rather
+        than nesting under `/queue/`) avoids ambiguity with
+        `/queue/{queueEntryId}/dismiss`.
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Phone number as entered by the customer (not normalized).
+      responses:
+        "200":
+          description: The active queue entry for this phone number, with computed wait.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueEntryView"
+        "404":
+          description: No active reservation found for this phone number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /queue/{queueEntryId}:
+    delete:
+      operationId: cancelQueueEntry
+      tags: [Queue]
+      summary: Cancel a queue entry (customer, at kiosk) (US-K3)
+      description: Removes the caller's own queue entry entirely. No table interaction.
+      parameters:
+        - $ref: "#/components/parameters/QueueEntryId"
+      responses:
+        "204":
+          description: Entry cancelled.
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /queue/{queueEntryId}/dismiss:
+    post:
+      operationId: dismissQueueEntry
+      tags: [Queue]
+      summary: Dismiss a queue entry (Host, e.g. no-show) (US-H5)
+      description: Removes a queue entry entirely, e.g. because the party never showed up. No table interaction.
+      parameters:
+        - $ref: "#/components/parameters/QueueEntryId"
+      responses:
+        "204":
+          description: Entry dismissed.
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    TableId:
+      name: tableId
+      in: path
+      required: true
+      schema:
+        type: string
+    QueueEntryId:
+      name: queueEntryId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    NotFound:
+      description: No such table or queue entry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: NOT_FOUND
+            message: Table not found.
+    TableUnavailable:
+      description: The selected table is not `available` (already occupied, or does not exist).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: TABLE_UNAVAILABLE
+            message: Table is not available.
+    ValidationError:
+      description: Invalid request body.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    TableSize:
+      type: integer
+      enum: [1, 2, 4, 6]
+      description: One of SeatCute's four fixed table sizes.
+
+    TableStatus:
+      type: string
+      enum: [available, occupied]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [PARTY_TOO_LARGE, DUPLICATE_PHONE, NOT_FOUND, TABLE_UNAVAILABLE]
+        message:
+          type: string
+
+    SizeCountMap:
+      type: object
+      description: Table count per size. Keys are the four fixed sizes, as strings ("1", "2", "4", "6").
+      properties:
+        "1": { type: integer, minimum: 0 }
+        "2": { type: integer, minimum: 0 }
+        "4": { type: integer, minimum: 0 }
+        "6": { type: integer, minimum: 0 }
+      required: ["1", "2", "4", "6"]
+      example: { "1": 2, "2": 4, "4": 3, "6": 1 }
+
+    SizeMinutesMap:
+      type: object
+      description: Expected turnover, in minutes, per size. Keys are the four fixed sizes, as strings ("1", "2", "4", "6").
+      properties:
+        "1": { type: integer, minimum: 1 }
+        "2": { type: integer, minimum: 1 }
+        "4": { type: integer, minimum: 1 }
+        "6": { type: integer, minimum: 1 }
+      required: ["1", "2", "4", "6"]
+      example: { "1": 30, "2": 45, "4": 60, "6": 90 }
+
+    AdminConfig:
+      type: object
+      required: [sizes, counts, turnover]
+      properties:
+        sizes:
+          type: array
+          description: Fixed, not configurable.
+          items:
+            $ref: "#/components/schemas/TableSize"
+          example: [1, 2, 4, 6]
+        counts:
+          $ref: "#/components/schemas/SizeCountMap"
+        turnover:
+          $ref: "#/components/schemas/SizeMinutesMap"
+
+    AdminConfigInput:
+      type: object
+      description: Only `counts` and `turnover` are editable; `sizes` is fixed server-side.
+      required: [counts, turnover]
+      properties:
+        counts:
+          $ref: "#/components/schemas/SizeCountMap"
+        turnover:
+          $ref: "#/components/schemas/SizeMinutesMap"
+
+    Party:
+      type: object
+      description: Attached to a table once seated from the queue. Absent for a Bypass Queue occupancy.
+      nullable: true
+      required: [name, phone]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+
+    Table:
+      type: object
+      required: [id, size, label, status, occupiedAt, party, pendingRemoval]
+      properties:
+        id:
+          type: string
+        size:
+          $ref: "#/components/schemas/TableSize"
+        label:
+          type: string
+          description: Auto-numbered per size, e.g. "2-Seat #3". Not custom-labelable.
+          example: "2-Seat #3"
+        status:
+          $ref: "#/components/schemas/TableStatus"
+        occupiedAt:
+          type: integer
+          format: int64
+          nullable: true
+          description: Epoch milliseconds. `null` when `available`.
+        party:
+          $ref: "#/components/schemas/Party"
+        pendingRemoval:
+          type: boolean
+          description: If true, this table is deleted (not freed) the next time it's released.
+
+    TableView:
+      description: A Table augmented with fields computed at read time (US-H1).
+      allOf:
+        - $ref: "#/components/schemas/Table"
+        - type: object
+          required: [elapsedMinutes, freeAt]
+          properties:
+            elapsedMinutes:
+              type: integer
+              nullable: true
+              description: Minutes since `occupiedAt`. `null` when `available`.
+            freeAt:
+              type: integer
+              format: int64
+              description: Epoch milliseconds. `now` if available, else `occupiedAt + turnover[size]`.
+
+    QueueEntry:
+      type: object
+      required: [id, name, phone, partySize, queueSize, joinedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        partySize:
+          type: integer
+          minimum: 1
+          description: Exact party size entered by the customer.
+        queueSize:
+          allOf:
+            - $ref: "#/components/schemas/TableSize"
+          description: Smallest table size that fits `partySize`.
+        joinedAt:
+          type: integer
+          format: int64
+          description: Epoch milliseconds.
+
+    QueueEntryView:
+      description: A QueueEntry augmented with fields computed at read time (US-H4).
+      allOf:
+        - $ref: "#/components/schemas/QueueEntry"
+        - type: object
+          required: [position, projectedAt, projectedWaitMs]
+          properties:
+            position:
+              type: integer
+              minimum: 1
+              description: 1-indexed position within this entry's own queueSize queue.
+            projectedAt:
+              type: integer
+              format: int64
+              nullable: true
+              description: Epoch milliseconds this party is projected to be seated, floored at now. `null` if no tables of this size exist.
+            projectedWaitMs:
+              type: integer
+              nullable: true
+              description: max(0, projectedAt - now), in milliseconds. `null` if no tables of this size exist.
+
+    JoinQueueRequest:
+      type: object
+      required: [name, phone, partySize]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+          minLength: 1
+        partySize:
+          type: integer
+          minimum: 1
+
+    WaitEstimate:
+      type: object
+      required: [queueSize, immediate, projectedAt, projectedWaitMs]
+      properties:
+        queueSize:
+          type: integer
+          enum: [1, 2, 4, 6]
+          nullable: true
+          description: "`null` if `partySize` exceeds the largest table (see US-K1's non-goal for parties > 6)."
+        immediate:
+          type: boolean
+          description: True if a table of `queueSize` is available and that size's queue is currently empty — the kiosk should seat immediately with no queue entry.
+        projectedAt:
+          type: integer
+          format: int64
+          nullable: true
+          description: Projected seating time (epoch ms) for the position this party would take if they joined right now. `null` when `immediate` is true, `queueSize` is `null`, or no tables of this size exist.
+        projectedWaitMs:
+          type: integer
+          nullable: true
+          description: max(0, projectedAt - now), in milliseconds. Same nullability as `projectedAt`.
