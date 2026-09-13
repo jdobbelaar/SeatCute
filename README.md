@@ -1,6 +1,6 @@
 # SeatCute
 
-Overview
+## Overview
 
 SeatCute is a waitlist/seating manager for small restaurants with four fixed table sizes: 1, 2, 4, and 6 seats. It has three interaction surfaces:
 
