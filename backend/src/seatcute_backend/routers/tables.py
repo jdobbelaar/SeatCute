@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..deps import get_store
 from ..schemas import ErrorResponse, SeatFromQueueRequest, Table, TableView
-from ..store import MockStore
+from ..sql_store import SqlAlchemyStore
 
 router = APIRouter(prefix="/tables", tags=["Tables"])
 
@@ -15,7 +15,7 @@ _TABLE_ERROR_RESPONSES = {
 
 
 @router.get("", response_model=List[TableView])
-def list_tables(store: MockStore = Depends(get_store)) -> list:
+def list_tables(store: SqlAlchemyStore = Depends(get_store)) -> list:
     return store.list_tables()
 
 
@@ -25,7 +25,7 @@ def list_tables(store: MockStore = Depends(get_store)) -> list:
     responses=_TABLE_ERROR_RESPONSES,
 )
 def seat_from_queue(
-    table_id: str, body: SeatFromQueueRequest, store: MockStore = Depends(get_store)
+    table_id: str, body: SeatFromQueueRequest, store: SqlAlchemyStore = Depends(get_store)
 ) -> dict:
     return store.seat_from_queue(table_id, body.queue_entry_id)
 
@@ -35,7 +35,7 @@ def seat_from_queue(
     response_model=Table,
     responses=_TABLE_ERROR_RESPONSES,
 )
-def seat_bypass(table_id: str, store: MockStore = Depends(get_store)) -> dict:
+def seat_bypass(table_id: str, store: SqlAlchemyStore = Depends(get_store)) -> dict:
     return store.seat_bypass(table_id)
 
 
@@ -44,5 +44,5 @@ def seat_bypass(table_id: str, store: MockStore = Depends(get_store)) -> dict:
     status_code=204,
     responses={404: {"model": ErrorResponse}},
 )
-def release_table(table_id: str, store: MockStore = Depends(get_store)) -> None:
+def release_table(table_id: str, store: SqlAlchemyStore = Depends(get_store)) -> None:
     store.release_table(table_id)

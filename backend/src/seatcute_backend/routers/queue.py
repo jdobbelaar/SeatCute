@@ -2,10 +2,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 
+from ..constants import SIZES
 from ..deps import get_store
 from ..errors import InvalidQueryError, NotFoundError
 from ..schemas import ErrorResponse, JoinQueueRequest, QueueEntry, QueueEntryView, WaitEstimate
-from ..store import SIZES, MockStore
+from ..sql_store import SqlAlchemyStore
 
 router = APIRouter(tags=["Queue"])
 
@@ -13,7 +14,7 @@ router = APIRouter(tags=["Queue"])
 @router.get("/queue", response_model=List[QueueEntryView])
 def list_queue(
     size: Optional[int] = Query(None, description="Restrict to one size's queue; omit for all sizes."),
-    store: MockStore = Depends(get_store),
+    store: SqlAlchemyStore = Depends(get_store),
 ) -> list:
     # NOTE: validated manually (rather than via `Literal[1, 2, 4, 6]` on the
     # query param) because query-string ints aren't coerced before Literal
@@ -31,14 +32,14 @@ def list_queue(
     status_code=201,
     responses={409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
 )
-def join_queue(body: JoinQueueRequest, store: MockStore = Depends(get_store)) -> dict:
+def join_queue(body: JoinQueueRequest, store: SqlAlchemyStore = Depends(get_store)) -> dict:
     return store.join_queue(body.name, body.phone, body.party_size)
 
 
 @router.get("/queue/wait-estimate", response_model=WaitEstimate)
 def get_wait_estimate(
     party_size: int = Query(..., alias="partySize", ge=1, description="Exact party size entered by the customer."),
-    store: MockStore = Depends(get_store),
+    store: SqlAlchemyStore = Depends(get_store),
 ) -> dict:
     return store.get_wait_estimate(party_size)
 
@@ -50,7 +51,7 @@ def get_wait_estimate(
 )
 def find_active_queue_entry_by_phone(
     phone: str = Query(..., description="Phone number as entered by the customer (not normalized)."),
-    store: MockStore = Depends(get_store),
+    store: SqlAlchemyStore = Depends(get_store),
 ) -> dict:
     result = store.find_active_queue_entry_by_phone(phone)
     if result is None:
@@ -63,7 +64,7 @@ def find_active_queue_entry_by_phone(
     status_code=204,
     responses={404: {"model": ErrorResponse}},
 )
-def cancel_queue_entry(queue_entry_id: str, store: MockStore = Depends(get_store)) -> None:
+def cancel_queue_entry(queue_entry_id: str, store: SqlAlchemyStore = Depends(get_store)) -> None:
     store.cancel_queue_entry(queue_entry_id)
 
 
@@ -72,5 +73,5 @@ def cancel_queue_entry(queue_entry_id: str, store: MockStore = Depends(get_store
     status_code=204,
     responses={404: {"model": ErrorResponse}},
 )
-def dismiss_queue_entry(queue_entry_id: str, store: MockStore = Depends(get_store)) -> None:
+def dismiss_queue_entry(queue_entry_id: str, store: SqlAlchemyStore = Depends(get_store)) -> None:
     store.dismiss_queue_entry(queue_entry_id)

@@ -34,12 +34,14 @@ Then open `http://localhost:8080/index.html` (Host/Admin) and
 ## Backend
 
 `backend/` is a FastAPI implementation of `openapi.yaml`, managed with
-[uv](https://docs.astral.sh/uv/). It currently uses an in-memory mock store
-(`seatcute_backend/store.py`) instead of a real database — same business
-rules that used to live in the frontend's mock layer, just re-implemented in
-Python — injected via a FastAPI dependency (`seatcute_backend/deps.py`) so it
-can be swapped for a real database later without touching the routers.
-State resets whenever the backend process restarts.
+[uv](https://docs.astral.sh/uv/). Persistence is via
+[SQLAlchemy](https://www.sqlalchemy.org/) (`seatcute_backend/db.py` +
+`sql_store.py`), defaulting to a local SQLite file (`backend/db.sqlite3`,
+created automatically, gitignored). The app is database-agnostic: no
+SQLite-specific SQL or column types are used anywhere, so pointing
+`DATABASE_URL` at Postgres/MySQL/etc. later (plus installing the matching
+driver package) is the only change needed — no router or business-logic
+code depends on which database is behind `seatcute_backend/deps.py`.
 
 ```
 cd backend
@@ -52,4 +54,5 @@ This starts the API at `http://localhost:8000` (open
 `http://localhost:8000/docs` for interactive API docs) with permissive
 dev-only CORS enabled, so `frontend/`'s `fetch()` calls from a different
 origin/port are allowed. Change `API_BASE_URL` in
-`frontend/js/constants.js` if the backend runs somewhere else.
+`frontend/js/constants.js` if the backend runs somewhere else, or
+`DATABASE_URL` (env var) to point the backend at a different database.
