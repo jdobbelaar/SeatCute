@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SeatCute — Host &amp; Admin</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="app-header">
+    <h1>SeatCute — Host &amp; Admin</h1>
+    <div class="view-toggle">
+      <button type="button" id="tab-host" class="active">Host</button>
+      <button type="button" id="tab-admin">Admin</button>
+    </div>
+  </header>
+
+  <!-- ============ HOST VIEW ============ -->
+  <section id="view-host" class="view active">
+    <div class="selection-bar">
+      <span id="selection-text" class="hint">No table selected — select an available table below to seat a party.</span>
+      <button type="button" id="btn-bypass" class="btn btn-outline" disabled>Bypass Queue (walk-in)</button>
+    </div>
+
+    <section class="panel">
+      <h2>Tables</h2>
+      <div id="tables-container"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Queues</h2>
+      <div id="queues-container" class="queue-columns"></div>
+    </section>
+  </section>
+
+  <!-- ============ ADMIN VIEW ============ -->
+  <section id="view-admin" class="view">
+    <section class="panel">
+      <h2>Table Configuration</h2>
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Size</th>
+            <th>Table Count</th>
+            <th>Turnover (minutes)</th>
+          </tr>
+        </thead>
+        <tbody id="admin-config-body"></tbody>
+      </table>
+      <div class="admin-actions">
+        <button type="button" id="btn-save-config" class="btn btn-primary">Save Changes</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+    </section>
+  </section>
+</div>
+
+<script src="js/constants.js"></script>
+<script src="js/format.js"></script>
+<script src="js/mockApi.js"></script>
+<script src="js/host.js"></script>
+</body>
+</html>

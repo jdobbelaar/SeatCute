@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SeatCute — Kiosk</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="kiosk-body">
+<div class="kiosk-frame">
+
+  <!-- Welcome / party size -->
+  <div id="screen-welcome" class="kiosk-screen active">
+    <div class="kiosk-logo">SeatCute</div>
+    <div class="kiosk-title">How many in your party?</div>
+    <input id="input-party-size" class="kiosk-input" type="number" min="1" inputmode="numeric" placeholder="e.g. 3" />
+    <div id="welcome-error" class="kiosk-error"></div>
+    <button id="btn-get-in-line" type="button" class="kiosk-btn">Continue</button>
+    <button id="btn-reservation-status" type="button" class="kiosk-link-btn">Check my reservation status</button>
+  </div>
+
+  <!-- Name / phone -->
+  <div id="screen-name-phone" class="kiosk-screen">
+    <div class="kiosk-title">Hold your spot in line</div>
+    <div class="kiosk-subtitle">We'll use this to call your table.</div>
+    <div class="kiosk-field">
+      <label for="input-name">Name</label>
+      <input id="input-name" class="kiosk-input" type="text" placeholder="Full name" />
+    </div>
+    <div class="kiosk-field">
+      <label for="input-phone">Phone Number</label>
+      <input id="input-phone" class="kiosk-input" type="tel" placeholder="(555) 555-5555" />
+    </div>
+    <div id="name-phone-error" class="kiosk-error"></div>
+    <button id="btn-join-line" type="button" class="kiosk-btn">Join the Line</button>
+    <button id="btn-name-phone-back" type="button" class="kiosk-link-btn">Back</button>
+  </div>
+
+  <!-- Generic transient message -->
+  <div id="screen-message" class="kiosk-screen">
+    <div class="kiosk-logo">SeatCute</div>
+    <div id="message-text" class="kiosk-message"></div>
+  </div>
+
+  <!-- Wait confirmation after joining the queue -->
+  <div id="screen-wait-confirm" class="kiosk-screen">
+    <div class="kiosk-title">You're in line!</div>
+    <div id="wait-big" class="kiosk-wait-big"></div>
+    <div id="wait-sub" class="kiosk-wait-sub"></div>
+    <div class="kiosk-subtitle">Return to the kiosk if you'd like to cancel.</div>
+  </div>
+
+  <!-- Reservation status: ask phone -->
+  <div id="screen-status-phone" class="kiosk-screen">
+    <div class="kiosk-title">Check Reservation Status</div>
+    <div class="kiosk-field">
+      <label for="input-status-phone">Phone Number</label>
+      <input id="input-status-phone" class="kiosk-input" type="tel" placeholder="(555) 555-5555" />
+    </div>
+    <div id="status-phone-error" class="kiosk-error"></div>
+    <button id="btn-check-status" type="button" class="kiosk-btn">Check Status</button>
+    <button id="btn-status-phone-back" type="button" class="kiosk-link-btn">Back</button>
+  </div>
+
+  <!-- Reservation status: result -->
+  <div id="screen-status-result" class="kiosk-screen">
+    <div class="kiosk-title">Your Reservation</div>
+    <div id="status-wait-big" class="kiosk-wait-big"></div>
+    <div id="status-wait-sub" class="kiosk-wait-sub"></div>
+    <div class="kiosk-btn-row">
+      <button id="btn-keep" type="button" class="kiosk-btn secondary">Keep My Reservation</button>
+      <button id="btn-cancel-reservation" type="button" class="kiosk-btn danger">Cancel</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/constants.js"></script>
+<script src="js/format.js"></script>
+<script src="js/mockApi.js"></script>
+<script src="js/kiosk.js"></script>
+</body>
+</html>
