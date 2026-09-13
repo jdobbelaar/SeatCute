@@ -268,16 +268,33 @@ window.SeatCuteAPI = (function () {
     });
   }
 
-  // Kiosk decision helper for US-K1: maps a party size to its queue size and
-  // reports whether it can be seated immediately with no queue entry (§4).
-  async function checkImmediateSeat(partySize) {
+  // Kiosk decision helper for US-K1/K2: maps a party size to its queue size,
+  // reports whether it can be seated immediately with no queue entry (§4),
+  // and (for the non-immediate case) previews the projected wait for the
+  // position this party would take if they join right now -- so the kiosk
+  // can show the estimate *before* asking for name/phone.
+  async function getWaitEstimate(partySize) {
     await delay();
     ensureInitialized();
     const queueSize = mapPartySizeToQueueSize(partySize);
-    if (queueSize === null) return { queueSize: null, immediate: false };
+    if (queueSize === null) return { queueSize: null, immediate: false, projectedAt: null, projectedWaitMs: null };
+
+    const config = readJSON(STORAGE_KEYS.config, DEFAULT_CONFIG);
     const tables = readJSON(STORAGE_KEYS.tables, []);
     const queue = readJSON(STORAGE_KEYS.queue, []);
-    return { queueSize, immediate: isImmediateSeatAvailable(queueSize, tables, queue) };
+    const immediate = isImmediateSeatAvailable(queueSize, tables, queue);
+
+    const position = queue.filter((q) => q.queueSize === queueSize).length + 1;
+    const freeTimes = freeTimesForSize(queueSize, tables, config);
+    const now = Date.now();
+    const projectedAt = freeTimes.length >= position ? freeTimes[position - 1] : null;
+
+    return {
+      queueSize,
+      immediate,
+      projectedAt: projectedAt !== null ? Math.max(now, projectedAt) : null,
+      projectedWaitMs: projectedAt !== null ? Math.max(0, projectedAt - now) : null,
+    };
   }
 
   async function findActiveQueueEntryByPhone(phone) {
@@ -402,7 +419,7 @@ window.SeatCuteAPI = (function () {
     saveConfig,
     listTables,
     listQueue,
-    checkImmediateSeat,
+    getWaitEstimate,
     findActiveQueueEntryByPhone,
     joinQueue,
     cancelQueueEntry,

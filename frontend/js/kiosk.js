@@ -5,6 +5,7 @@
 
   const screens = {
     welcome: document.getElementById('screen-welcome'),
+    waitPreview: document.getElementById('screen-wait-preview'),
     namePhone: document.getElementById('screen-name-phone'),
     message: document.getElementById('screen-message'),
     waitConfirm: document.getElementById('screen-wait-confirm'),
@@ -64,24 +65,43 @@
     btnGetInLine.disabled = true;
 
     try {
-      const { queueSize, immediate } = await API.checkImmediateSeat(partySize);
-      if (queueSize === null) {
+      const estimate = await API.getWaitEstimate(partySize);
+      if (estimate.queueSize === null) {
         showMessage('Please speak with our host directly for large parties.', CFG.MESSAGE_DEFAULT_MS);
         return;
       }
-      if (immediate) {
+      if (estimate.immediate) {
         showMessage('A table is available — please wait for your host.', CFG.MESSAGE_DEFAULT_MS);
         return;
       }
       pendingPartySize = partySize;
-      document.getElementById('input-name').value = '';
-      document.getElementById('input-phone').value = '';
-      document.getElementById('name-phone-error').textContent = '';
-      showScreen('namePhone');
+      showWaitPreview(estimate);
     } finally {
       btnGetInLine.disabled = false;
     }
   }
+
+  function showWaitPreview(estimate) {
+    const big = document.getElementById('preview-wait-big');
+    const sub = document.getElementById('preview-wait-sub');
+    if (estimate.projectedAt !== null) {
+      big.textContent = `~${FMT.durationWords(estimate.projectedWaitMs)}`;
+      sub.textContent = `Estimated seating time: ${FMT.clockTime(estimate.projectedAt)}`;
+    } else {
+      big.textContent = 'Wait time unavailable';
+      sub.textContent = 'We\'ll seat you as soon as a table is ready.';
+    }
+    showScreen('waitPreview');
+    returnTimer = setTimeout(goWelcome, CFG.WAIT_PREVIEW_TIMEOUT_MS);
+  }
+
+  document.getElementById('btn-cancel-preview').addEventListener('click', goWelcome);
+  document.getElementById('btn-reserve-spot').addEventListener('click', () => {
+    document.getElementById('input-name').value = '';
+    document.getElementById('input-phone').value = '';
+    document.getElementById('name-phone-error').textContent = '';
+    showScreen('namePhone');
+  });
 
   // ---------------- Name / phone (US-K2) ----------------
 
